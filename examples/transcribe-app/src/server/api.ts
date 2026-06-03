@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { verifySessionToken } from '@seeit/glass-sdk';
+import { verifySessionToken } from '@seeit/app-sdk';
 import { store } from './store.js';
 
 const appId = process.env.SEEIT_APP_ID ?? '';

@@ -1,4 +1,4 @@
-import type { TranscriptionData } from "@seeit/glass-sdk";
+import type { TranscriptionData } from "@seeit/app-sdk";
 import type { ServerResponse } from "node:http";
 
 const MAX_HISTORY = 100;
