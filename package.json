@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsup"
   },
   "dependencies": {
     "jose": "^6.2.3",
