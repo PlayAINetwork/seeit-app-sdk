@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { verifySessionToken } from '@seeit/glass-sdk';
+import { verifySessionToken } from '@seeit/app-sdk';
 import { store } from './store.js';
 import { LANGUAGES, isValidLanguage } from './languages.js';
 

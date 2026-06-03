@@ -1,4 +1,4 @@
-import { GlassAppServer, GlassAppSession } from "@seeit/glass-sdk";
+import { GlassAppServer, GlassAppSession } from "@seeit/app-sdk";
 import { store } from "./store.js";
 import { translate } from "./translator.js";
 
