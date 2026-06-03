@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "node18",
-  external: ["@livekit/rtc-node", "fluent-ffmpeg"],
+  external: ["jose", "ws"],
 });

@@ -76,3 +76,27 @@ releases all resources. Called automatically on `session.ended`.
 `GlassAppServer` manages one session per `(appId, userId, roomId)` tuple.
 If a new `session.started` arrives for a user who already has an active
 session, the stale session is disconnected before the new one is created.
+
+---
+
+## Mounting on your own server
+
+Call `start()` and the SDK runs its own HTTP server. If you already have a web
+server (e.g. you also serve a [webview](./webviews.md)), mount the webhook on it
+instead with `handleWebhookRequest(req, res)` and **don't** call `start()`:
+
+```ts
+import express from "express";
+
+const glass = new MyApp();              // note: no glass.start()
+const app = express();
+
+// Register BEFORE any body parser — signature verification needs the raw stream.
+app.post("/webhook", (req, res) => glass.handleWebhookRequest(req, res));
+
+app.use(express.json());                // other routes can parse JSON
+app.listen(3000);
+```
+
+This keeps your webhook and webview on a single port/origin. See
+[examples/webview-app](../examples/webview-app) for a full reference.

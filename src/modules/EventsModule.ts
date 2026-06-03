@@ -1,58 +1,30 @@
-import { Room, RoomEvent, RemoteParticipant } from "@livekit/rtc-node";
-import type { TranscriptionData, DataMessage, Unsubscribe } from "../../types/index.js";
+import type { RelayConnection } from "../relay-connection.js";
+import type {
+  TranscriptionData,
+  DataMessage,
+  Unsubscribe,
+} from "../../types/index.js";
 
 /**
- * Handles real-time events from the glasses session:
- * - Speech transcription (sent as data-channel messages with type "transcription")
- * - Raw data-channel messages
- *
- * Transcription format expected on the data channel:
- *   { type: "transcription", segmentId, text, isFinal, isUser }
+ * Real-time events from the glasses session, relayed by SeeIt:
+ * - speech transcription
+ * - raw data messages
  */
 export class EventsModule {
-  private readonly room: Room;
-
-  constructor(room: Room) {
-    this.room = room;
-  }
+  constructor(private readonly conn: RelayConnection) {}
 
   /**
-   * Subscribe to speech transcription events from the glasses user.
-   *
-   * The glasses device sends transcription segments as JSON data-channel
-   * messages with `type: "transcription"`.
+   * Subscribe to speech transcription from the glasses user (and the agent).
+   * SeeIt performs the transcription and relays segments to you.
    */
   onTranscription(handler: (data: TranscriptionData) => void): Unsubscribe {
-    const listener = (
-      payload: Uint8Array,
-      _participant?: RemoteParticipant,
-      _kind?: unknown,
-      topic?: string
-    ) => {
-      // Accept messages on the "transcription" topic OR any topic-less message
-      // that parses as a transcription object.
-      try {
-        const text = new TextDecoder().decode(payload);
-        const msg = JSON.parse(text) as Record<string, unknown>;
-        if (msg["type"] !== "transcription") return;
-
-        handler({
-          segmentId: String(msg["segmentId"] ?? msg["id"] ?? ""),
-          text: String(msg["text"] ?? ""),
-          isFinal: Boolean(msg["isFinal"] ?? msg["final"] ?? false),
-          isUser: Boolean(msg["isUser"] ?? true),
-        });
-      } catch {
-        // Non-JSON or unrelated message — ignore
-      }
-    };
-
-    this.room.on(RoomEvent.DataReceived, listener);
-    return () => this.room.off(RoomEvent.DataReceived, listener);
+    return this.conn.onEvent("transcription", (data) =>
+      handler(data as TranscriptionData)
+    );
   }
 
   /**
-   * Subscribe to raw data-channel messages.
+   * Subscribe to raw data messages relayed from the room.
    * Optionally filter by topic.
    */
   onData(handler: (msg: DataMessage) => void): Unsubscribe;
@@ -66,21 +38,14 @@ export class EventsModule {
     const handler =
       typeof topicOrHandler === "function" ? topicOrHandler : maybeHandler!;
 
-    const listener = (
-      payload: Uint8Array,
-      participant?: RemoteParticipant,
-      _kind?: unknown,
-      topic?: string
-    ) => {
-      if (filterTopic !== undefined && topic !== filterTopic) return;
+    return this.conn.onEvent("data", (data) => {
+      const m = data as { topic?: string; payload: string; from: string };
+      if (filterTopic !== undefined && m.topic !== filterTopic) return;
       handler({
-        data: payload,
-        ...(topic !== undefined ? { topic } : {}),
-        senderIdentity: participant?.identity ?? "",
+        payload: m.payload,
+        ...(m.topic !== undefined ? { topic: m.topic } : {}),
+        senderIdentity: m.from,
       });
-    };
-
-    this.room.on(RoomEvent.DataReceived, listener);
-    return () => this.room.off(RoomEvent.DataReceived, listener);
+    });
   }
 }

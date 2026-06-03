@@ -90,6 +90,27 @@ export abstract class GlassAppServer {
       return;
     }
 
+    await this.handleWebhookRequest(req, res);
+  }
+
+  /**
+   * Handle a single webhook request on a server you control.
+   *
+   * Use this to mount the app's webhook on your own HTTP/Express server instead
+   * of calling {@link start} (which opens its own port). Register it on the
+   * webhook path **before** any body parser — signature verification needs the
+   * raw request stream.
+   *
+   * @example
+   * ```ts
+   * const glass = new MyApp();              // do NOT call glass.start()
+   * app.post("/webhook", (req, res) => glass.handleWebhookRequest(req, res));
+   * ```
+   */
+  async handleWebhookRequest(
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
     let body: Buffer;
     try {
       body = await readBody(req);
@@ -145,15 +166,15 @@ export abstract class GlassAppServer {
     let session: GlassAppSession;
     try {
       session = await createSession({
-        url: payload.url,
-        token: payload.token,
+        relayUrl: payload.relayUrl,
+        relayToken: payload.relayToken,
         roomId: payload.roomId,
         userId: payload.userId,
         appId: payload.appId,
       });
     } catch (err) {
       console.error(
-        `[GlassAppServer] Failed to connect to LiveKit room ${payload.roomId}:`,
+        `[GlassAppServer] Failed to connect to the SeeIt relay for room ${payload.roomId}:`,
         err
       );
       return;

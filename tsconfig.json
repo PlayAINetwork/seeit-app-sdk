@@ -16,6 +16,6 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "types", "examples"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src", "types"],
+  "exclude": ["node_modules", "dist", "examples"]
 }

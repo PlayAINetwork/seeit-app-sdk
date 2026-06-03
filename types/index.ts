@@ -7,8 +7,10 @@ export interface SessionStartedPayload {
   appId: string;
   userId: string;
   roomId: string;
-  url: string;
-  token: string;
+  /** WebSocket URL of the SeeIt relay to connect to. */
+  relayUrl: string;
+  /** Scoped credential for opening the relay connection. */
+  relayToken: string;
   timestamp: string;
 }
 
@@ -42,7 +44,7 @@ export interface GlassAppServerOptions {
 // Event types
 // ---------------------------------------------------------------------------
 
-/** A speech transcription segment received from the glasses user */
+/** A speech transcription segment from the glasses user */
 export interface TranscriptionData {
   /** Unique segment identifier */
   segmentId: string;
@@ -50,34 +52,51 @@ export interface TranscriptionData {
   text: string;
   /** Whether this is the final (committed) transcription for this segment */
   isFinal: boolean;
-  /** true = spoken by the glasses user; false = spoken by an AI agent in the room */
-  isUser: boolean;
 }
 
-/** A raw data-channel message received from a room participant */
+/** A raw data message relayed from the room. */
 export interface DataMessage {
-  /** Raw message bytes */
-  data: Uint8Array;
-  /** Optional topic the message was published to */
+  /** Decoded message payload. */
+  payload: string;
+  /** Optional topic the message was published to. */
   topic?: string;
-  /** LiveKit identity of the sender */
+  /** Identity of the sender in the room. */
   senderIdentity: string;
 }
 
 // ---------------------------------------------------------------------------
-// Audio
+// Webview auth (Glass launch handshake)
 // ---------------------------------------------------------------------------
 
-export interface PlayAudioOptions {
-  /** Playback volume from 0 (silent) to 1 (full). Default: 1.0 */
-  volume?: number;
-  /** Loop the audio until stopAudio() is called. Default: false */
-  loop?: boolean;
+export interface VerifySessionTokenOptions {
+  /** Your app's ID (the token's `aud` claim must match this). */
+  appId: string;
+  /**
+   * Override the JWKS endpoint used to verify tokens.
+   * Defaults to SeeIt's public JWKS (`/glass/.well-known/jwks.json`).
+   */
+  jwksUrl?: string;
 }
 
-export interface AudioPublishOptions {
-  /** Audio bitrate in bps. Default: 32000 */
-  audioBitrate?: number;
+/** Verified identity extracted from a session (or launch) token. */
+export interface SessionClaims {
+  /** SeeIt user ID of the glasses wearer (the token `sub`). */
+  userId: string;
+  /** Your app ID (the verified `aud`). */
+  appId: string;
+  /** Which token this was: short-lived `launch` or durable `session`. */
+  tokenType: "launch" | "session";
+  /** User's display name, when present on the token. */
+  name?: string;
+  /** User's email, when present on the token. */
+  email?: string;
+  /**
+   * The durable session token — present only on a `launch` token. Your web UI
+   * stores this and sends it as `Authorization: Bearer <sessionToken>`.
+   */
+  sessionToken?: string;
+  /** Expiry as a Unix timestamp (seconds), if set. */
+  expiresAt?: number;
 }
 
 // ---------------------------------------------------------------------------

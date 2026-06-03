@@ -4,6 +4,7 @@ export { EventsModule } from "./modules/EventsModule.js";
 export { AudioModule } from "./modules/AudioModule.js";
 export { CameraModule } from "./modules/CameraModule.js";
 export { DataModule } from "./modules/DataModule.js";
+export { verifySessionToken } from "./auth/verifySessionToken.js";
 
 export type {
   GlassAppServerOptions,
@@ -12,8 +13,8 @@ export type {
   WebhookPayload,
   TranscriptionData,
   DataMessage,
-  PlayAudioOptions,
-  AudioPublishOptions,
   Unsubscribe,
   ConnectionEvent,
+  VerifySessionTokenOptions,
+  SessionClaims,
 } from "../types/index.js";

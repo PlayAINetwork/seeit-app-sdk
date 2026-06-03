@@ -98,3 +98,4 @@ import type { TranscriptionData, PlayAudioOptions } from "@seeit/glass-sdk";
 - [Session API](./session.md)
 - [Event handlers](./events.md)
 - [Audio & Camera](./audio-camera.md)
+- [Webviews (custom UI)](./webviews.md)

@@ -1,4 +1,4 @@
-import { GlassAppServer, GlassAppSession } from "../../src/index.js";
+import { GlassAppServer, GlassAppSession } from '../../src/index.js';
 
 /**
  * Basic example: log transcription from the glasses user.
@@ -14,33 +14,29 @@ import { GlassAppServer, GlassAppSession } from "../../src/index.js";
 class BasicApp extends GlassAppServer {
   protected async onSession(session: GlassAppSession): Promise<void> {
     console.log(
-      `[BasicApp] Session started — userId: ${session.userId}, room: ${session.roomId}`
+      `[BasicApp] Session started — userId: ${session.userId}, room: ${session.roomId}`,
     );
 
     // Listen for speech transcription from the glasses user
     const unsubTranscription = session.events.onTranscription(
-      ({ text, isFinal, isUser }) => {
+      ({ text, isFinal }) => {
         if (!isFinal) return;
-        const speaker = isUser ? "User" : "Agent";
+        const speaker = 'User';
         console.log(`[${speaker}]: ${text}`);
-      }
+
+        if (text.toLowerCase().includes('helo')) {
+          session.speak('Hello! How can I assist you today?');
+        }
+      },
     );
 
-    // Listen for raw data-channel messages
-    session.events.onData(({ data, topic, senderIdentity }) => {
-      const decoded = new TextDecoder().decode(data);
-      console.log(
-        `[Data] from=${senderIdentity} topic=${topic ?? "-"}: ${decoded}`
-      );
-    });
-
     // Clean up when session ends
-    session.on("disconnected", () => {
+    session.on('disconnected', () => {
       console.log(`[BasicApp] Session ended — userId: ${session.userId}`);
       unsubTranscription();
     });
   }
 }
 
-const app = new BasicApp({ port: 3000 });
+const app = new BasicApp({ port: 5001 });
 app.start().catch(console.error);
