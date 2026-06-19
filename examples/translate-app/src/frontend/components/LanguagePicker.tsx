@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Sheet } from "./Sheet.js";
+import { GlobeIcon, CheckIcon } from "../lib/icons.js";
 import { useGlassUser } from "../auth.js";
 
 interface Language {
@@ -7,8 +9,8 @@ interface Language {
 }
 
 /**
- * Pill button showing the current target language; tap to choose another.
- * Persists the choice to the backend (applies to future segments).
+ * Compact pill in the top bar that opens an iOS-style sheet to pick the target
+ * language. Persists the choice to the backend (applies to future segments).
  */
 export function LanguagePicker({
   language,
@@ -20,22 +22,12 @@ export function LanguagePicker({
   const { user } = useGlassUser();
   const [languages, setLanguages] = useState<Language[]>([]);
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/languages")
       .then((r) => r.json())
       .then((d) => setLanguages(d.languages ?? []))
       .catch(() => {});
-  }, []);
-
-  // close on outside click
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
   const select = (lang: string) => {
@@ -55,33 +47,37 @@ export function LanguagePicker({
   const current = languages.find((l) => l.value === language)?.label ?? language;
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-medium text-white hover:bg-white/15"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[13px] font-medium text-white transition active:scale-95 hover:bg-white/10"
       >
-        <span className="text-zinc-400">Translate to</span>
-        <span>{current}</span>
-        <span className="text-zinc-400">▾</span>
+        <GlobeIcon className="h-4 w-4 text-accent" />
+        {current}
       </button>
 
-      {open && (
-        <div className="absolute right-0 z-10 mt-2 max-h-72 w-48 overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/95 p-1 shadow-xl backdrop-blur">
-          {languages.map((l) => (
-            <button
-              key={l.value}
-              onClick={() => select(l.value)}
-              className={`block w-full rounded-xl px-3 py-2 text-left text-sm ${
-                l.value === language
-                  ? "bg-indigo-500/90 text-white"
-                  : "text-zinc-200 hover:bg-white/10"
-              }`}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      <Sheet open={open} onClose={() => setOpen(false)} title="Translate to">
+        <ul className="space-y-1">
+          {languages.map((l) => {
+            const active = l.value === language;
+            return (
+              <li key={l.value}>
+                <button
+                  onClick={() => select(l.value)}
+                  className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-[15px] transition active:scale-[0.98] ${
+                    active
+                      ? "bg-accent-soft text-white"
+                      : "text-zinc-200 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {l.label}
+                  {active && <CheckIcon className="h-5 w-5 text-accent" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Sheet>
+    </>
   );
 }

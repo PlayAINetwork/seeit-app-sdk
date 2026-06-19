@@ -1,63 +1,48 @@
 import { GlassAppServer, GlassAppSession } from "@seeit/app-sdk";
 import { store } from "./store.js";
-import { translate } from "./translator.js";
+import { runTranslation } from "./translateFlow.js";
 
 /**
- * Glass app logic: stream the user's speech transcription, and translate each
- * segment into their chosen language once it finalizes.
+ * Glass app logic: stream the user's speech transcription, translate each final
+ * segment into their chosen language (streaming the translation in), and — when
+ * the speak-back setting is on — speak the translation back through the glasses.
  *
- * Interim segments show the original live; on a final segment we push the
- * original immediately, then translate (OpenAI) and push the translation in.
+ * Each glasses connection becomes a discrete, browsable session in the store.
  */
 export class TranslateApp extends GlassAppServer {
   protected async onSession(session: GlassAppSession): Promise<void> {
     const userId = session.userId;
+    const sessionId = session.sessionId;
     console.log(`[TranslateApp] session started — user=${userId}`);
+
+    store.startSession(userId, sessionId, Date.now());
 
     const unsubscribe = session.events.onTranscription((t) => {
       if (!t.isFinal) {
-        store.upsertSegment(userId, {
+        // Interim: show the original live, nothing translated yet.
+        store.upsertSegment(userId, sessionId, {
           segmentId: t.segmentId,
           original: t.text,
           translated: null,
+          sourceLang: null,
           isFinal: false,
         });
         return;
       }
 
-      // Final: show the original right away, then fill in the translation.
-      store.upsertSegment(userId, {
-        segmentId: t.segmentId,
-        original: t.text,
-        translated: null,
-        isFinal: true,
-      });
-
-      const lang = store.getLanguage(userId);
-      translate(t.text, lang)
-        .then((translated) => {
-          console.log(`[TranslateApp] → ${lang}: ${translated}`);
-          store.upsertSegment(userId, {
-            segmentId: t.segmentId,
-            original: t.text,
-            translated,
-            isFinal: true,
-          });
-        })
-        .catch((err) => {
-          console.error("[TranslateApp] translate failed:", err?.message ?? err);
-          store.upsertSegment(userId, {
-            segmentId: t.segmentId,
-            original: t.text,
-            translated: "(translation failed)",
-            isFinal: true,
-          });
-        });
+      // Final: hand off to the shared translate pipeline (streams + speaks).
+      void runTranslation(
+        userId,
+        sessionId,
+        { segmentId: t.segmentId, original: t.text },
+        { speak: (text) => session.audio.speak(text) },
+      );
     });
 
     session.on("disconnected", () => {
       console.log(`[TranslateApp] session ended — user=${userId}`);
       unsubscribe();
+      store.endSession(userId, sessionId, Date.now());
     });
   }
 }

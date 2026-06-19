@@ -40,5 +40,7 @@ app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
 app.listen(PORT, () => {
   console.log(`[server] listening on http://localhost:${PORT}`);
   console.log(`[server] webhook:  POST /webhook`);
-  console.log(`[server] api:      GET  /api/me, GET /api/transcripts`);
+  console.log(
+    `[server] api:      GET /api/me, /api/transcripts (SSE), /api/sessions, /api/sessions/:id`,
+  );
 });

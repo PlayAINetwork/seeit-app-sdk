@@ -41,6 +41,9 @@ app.listen(PORT, () => {
   console.log(`[server] listening on http://localhost:${PORT}`);
   console.log(`[server] webhook:  POST /webhook`);
   console.log(
-    `[server] api:      GET /api/languages, POST /api/language, GET /api/transcripts`,
+    `[server] api:      GET /api/me, /api/languages, /api/transcripts (SSE), /api/sessions[/:id]`,
+  );
+  console.log(
+    `[server] api:      POST /api/language, /api/settings, /api/retry/:id`,
   );
 });

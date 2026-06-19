@@ -1,83 +1,118 @@
 import { useEffect, useRef, useState } from "react";
-import { useGlassUser } from "../auth.js";
-
-interface Segment {
-  segmentId: string;
-  text: string;
-  isFinal: boolean;
-}
+import { AnimatePresence, motion } from "framer-motion";
+import type { Segment, StreamStatus } from "../hooks/useTranscriptStream.js";
+import { ArrowDownIcon, MicIcon } from "../lib/icons.js";
 
 /**
- * Opens an SSE connection to the backend and renders the glasses user's speech
- * transcription live. Interim segments are shown faded; finals solid.
+ * The live transcript surface: flowing, readable lines (à la Live Captions).
+ * Finals render solid; the in-progress utterance trails dimmed. Auto-scroll
+ * follows the latest line but yields the moment the user scrolls up to read.
  */
-export function TranscriptDisplay() {
-  const { user } = useGlassUser();
-  const [segments, setSegments] = useState<Segment[]>([]);
-  const [connected, setConnected] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+export function TranscriptDisplay({
+  segments,
+  status,
+}: {
+  segments: Segment[];
+  status: StreamStatus;
+}) {
+  const finals = segments.filter((s) => s.isFinal);
+  const interim = [...segments].reverse().find((s) => !s.isFinal);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(true);
+
+  // Follow the bottom only while the user hasn't scrolled away.
   useEffect(() => {
-    if (!user) return;
+    if (stuck) {
+      const el = scrollRef.current;
+      el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [segments, stuck]);
 
-    const es = new EventSource(
-      `/api/transcripts?token=${encodeURIComponent(user.sessionToken)}`
-    );
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setStuck(distance < 80);
+  };
 
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
+  const jumpToLive = () => {
+    const el = scrollRef.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setStuck(true);
+  };
 
-    es.onmessage = (e) => {
-      const seg = JSON.parse(e.data) as Segment;
-      setSegments((prev) => {
-        // Replace the matching segment (interim → final updates in place).
-        const idx = prev.findIndex((s) => s.segmentId === seg.segmentId);
-        if (idx === -1) return [...prev, seg];
-        const next = prev.slice();
-        next[idx] = seg;
-        return next;
-      });
-    };
-
-    return () => es.close();
-  }, [user]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [segments]);
+  const empty = finals.length === 0 && !interim;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-      <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-        <span
-          className={`h-2.5 w-2.5 rounded-full ${
-            connected ? "bg-emerald-400" : "bg-zinc-500"
-          }`}
-        />
-        <span className="text-sm font-medium text-zinc-300">
-          {connected ? "Listening" : "Connecting…"}
-        </span>
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-white/[0.07] bg-white/[0.03]">
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-5 py-6"
+      >
+        {empty ? (
+          <EmptyState status={status} />
+        ) : (
+          <div className="space-y-4">
+            {finals.map((s) => (
+              <motion.p
+                key={s.segmentId}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                className="text-[19px] font-medium leading-relaxed tracking-tight text-zinc-50"
+              >
+                {s.text}
+              </motion.p>
+            ))}
+            {interim && interim.text && (
+              <p className="text-[19px] font-medium leading-relaxed tracking-tight text-zinc-400">
+                {interim.text}
+                <span className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[2px] animate-breathe rounded-full bg-accent align-middle" />
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {segments.length === 0 ? (
-          <p className="mt-10 text-center text-sm text-zinc-500">
-            Start speaking — your transcript will appear here.
-          </p>
-        ) : (
-          segments.map((s) => (
-            <div
-              key={s.segmentId}
-              className={`ml-auto max-w-[85%] rounded-2xl bg-indigo-500/90 px-4 py-2 text-[15px] leading-snug text-white ${
-                s.isFinal ? "opacity-100" : "opacity-60"
-              }`}
-            >
-              {s.text || "…"}
-            </div>
-          ))
+      <AnimatePresence>
+        {!stuck && !empty && (
+          <motion.button
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            onClick={jumpToLive}
+            className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-accent px-3.5 py-2 text-[13px] font-semibold text-white shadow-float"
+          >
+            <ArrowDownIcon className="h-4 w-4" />
+            Jump to live
+          </motion.button>
         )}
-        <div ref={bottomRef} />
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function EmptyState({ status }: { status: StreamStatus }) {
+  const live = status === "live";
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+      <div
+        className={`mb-5 flex h-16 w-16 items-center justify-center rounded-full ${
+          live ? "bg-accent-soft text-accent" : "bg-white/5 text-zinc-500"
+        }`}
+      >
+        <MicIcon className={`h-7 w-7 ${live ? "animate-breathe" : ""}`} />
       </div>
+      <p className="text-[17px] font-semibold text-white">
+        {live ? "Listening…" : "Ready when you are"}
+      </p>
+      <p className="mt-1.5 max-w-[16rem] text-[14px] leading-relaxed text-zinc-500">
+        {live
+          ? "Start speaking and your words will appear here in real time."
+          : "Your live transcript will show up here as soon as you start talking."}
+      </p>
     </div>
   );
 }
