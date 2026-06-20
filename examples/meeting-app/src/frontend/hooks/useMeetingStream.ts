@@ -11,7 +11,7 @@ export type StreamStatus =
 export interface ActiveSession {
   sessionId: string;
   startedAt: number;
-  live: boolean;
+  recording: boolean;
 }
 
 type StreamEvent =
@@ -20,7 +20,7 @@ type StreamEvent =
       sessionId: string;
       startedAt: number;
       endedAt: number | null;
-      live: boolean;
+      recording: boolean;
     }
   | { type: "segment"; sessionId: string; segment: Segment }
   | { type: "insights"; sessionId: string; insights: Insights };
@@ -76,9 +76,9 @@ export function useMeetingStream(token: string | undefined) {
         setSession({
           sessionId: event.sessionId,
           startedAt: event.startedAt,
-          live: event.live,
+          recording: event.recording,
         });
-        setStatus(event.live ? "live" : "idle");
+        setStatus(event.recording ? "live" : "idle");
         return;
       }
 

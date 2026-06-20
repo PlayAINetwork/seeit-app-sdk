@@ -133,6 +133,12 @@ export const TagIcon = ({ className }: IconProps) => (
   </Svg>
 );
 
+export const StopIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
 export const MicIcon = ({ className }: IconProps) => (
   <Svg className={className}>
     <rect x="9" y="3" width="6" height="11" rx="3" />

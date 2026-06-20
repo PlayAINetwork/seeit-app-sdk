@@ -44,4 +44,5 @@ app.listen(PORT, () => {
   console.log(
     `[server] api:      GET /api/me, /api/transcripts (SSE), /api/sessions[/:id]`,
   );
+  console.log(`[server] api:      POST /api/start, /api/stop`);
 });

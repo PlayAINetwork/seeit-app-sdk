@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGlassUser, type GlassUser } from "./auth.js";
 import { useMeetingStream, type StreamStatus } from "./hooks/useMeetingStream.js";
@@ -7,7 +7,7 @@ import { TranscriptPanel } from "./components/TranscriptPanel.js";
 import { StatusPill } from "./components/StatusPill.js";
 import { ExportBar } from "./components/ExportBar.js";
 import { HistorySheet } from "./components/HistorySheet.js";
-import { HistoryIcon, RetryIcon, UsersIcon, NotesIcon, TranscriptIcon } from "./lib/icons.js";
+import { HistoryIcon, RetryIcon, UsersIcon, NotesIcon, TranscriptIcon, StopIcon } from "./lib/icons.js";
 
 type Tab = "notes" | "transcript";
 
@@ -26,7 +26,27 @@ function Home({ user }: { user: GlassUser }) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const initial = (user.name ?? user.userId).trim().charAt(0).toUpperCase();
-  const live = status === "live";
+  const recording = session?.recording ?? false;
+  const live = recording;
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!recording) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${user.sessionToken}`,
+  };
+  const start = () => {
+    fetch("/api/start", { method: "POST", headers }).catch(() => {});
+  };
+  const stop = () => {
+    fetch("/api/stop", { method: "POST", headers }).catch(() => {});
+  };
+  const elapsedMs = recording && session ? now - session.startedAt : 0;
 
   return (
     <div className="mx-auto flex h-full w-full max-w-md flex-col px-4 pt-safe pb-safe">
@@ -51,6 +71,13 @@ function Home({ user }: { user: GlassUser }) {
           <HistoryIcon className="h-[18px] w-[18px]" />
         </button>
       </header>
+
+      <RecordBar
+        recording={recording}
+        elapsedMs={elapsedMs}
+        onStart={start}
+        onStop={stop}
+      />
 
       <div className="flex items-center gap-2 pb-3">
         <Tabs tab={tab} onChange={setTab} status={status} />
@@ -86,6 +113,47 @@ function Home({ user }: { user: GlassUser }) {
       <HistorySheet open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>
   );
+}
+
+function RecordBar({
+  recording,
+  elapsedMs,
+  onStart,
+  onStop,
+}: {
+  recording: boolean;
+  elapsedMs: number;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  if (recording) {
+    return (
+      <button
+        onClick={onStop}
+        className="mb-3 flex w-full items-center justify-center gap-2.5 rounded-2xl border border-rose-500/30 bg-rose-500/15 py-3.5 text-[15px] font-semibold text-rose-200 transition active:scale-[0.99]"
+      >
+        <span className="h-2.5 w-2.5 rounded-full bg-rose-400 animate-breathe" />
+        <StopIcon className="h-[18px] w-[18px]" />
+        Stop · {mmss(elapsedMs)}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onStart}
+      className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 text-[15px] font-semibold text-white shadow-float transition active:scale-[0.99]"
+    >
+      <span className="h-2.5 w-2.5 rounded-full bg-white" />
+      Start meeting
+    </button>
+  );
+}
+
+function mmss(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function ParticipantBadge({ count }: { count: number | null }) {

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { verifySessionToken } from '@seeit/app-sdk';
 import { store } from './store.js';
+import { flushAnalysis } from './analyze.js';
 
 const appId = process.env.SEEIT_APP_ID ?? '';
 const jwksUrl = process.env.SEEIT_JWKS_URL;
@@ -31,6 +32,26 @@ api.get('/me', async (req: Request, res: Response) => {
   const claims = await authenticate(req.headers.authorization);
   if (!claims) return res.status(401).json({ error: 'unauthorized' });
   res.json({ userId: claims.userId, name: claims.name ?? null });
+});
+
+/** Start a new meeting recording. */
+api.post('/start', async (req: Request, res: Response) => {
+  const claims = await authenticate(req.headers.authorization);
+  if (!claims) return res.status(401).json({ error: 'unauthorized' });
+  const sessionId = store.startRecording(claims.userId, Date.now());
+  console.log(`[api] ${claims.userId} started recording ${sessionId}`);
+  res.json({ recording: true, sessionId });
+});
+
+/** Stop the current meeting recording and run a final summary pass. */
+api.post('/stop', async (req: Request, res: Response) => {
+  const claims = await authenticate(req.headers.authorization);
+  if (!claims) return res.status(401).json({ error: 'unauthorized' });
+  const sessionId = store.currentSessionId(claims.userId);
+  store.stopRecording(claims.userId, Date.now());
+  if (sessionId) void flushAnalysis(claims.userId, sessionId);
+  console.log(`[api] ${claims.userId} stopped recording`);
+  res.json({ recording: false });
 });
 
 /** List the user's recent meetings (most-recent first) for the history view. */
@@ -77,7 +98,7 @@ api.get('/transcripts', async (req: Request, res: Response) => {
         sessionId: session.sessionId,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
-        live: session.endedAt === null,
+        recording: store.isActive(claims.userId, session.sessionId),
       })}\n\n`,
     );
     if (session.insights) {

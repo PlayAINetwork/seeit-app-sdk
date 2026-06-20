@@ -9,6 +9,25 @@ interface Language {
 }
 
 /**
+ * Built-in language list (mirrors the server's languages.ts). Used directly so
+ * the picker always works even if the /api/languages fetch fails.
+ */
+const FALLBACK_LANGUAGES: Language[] = [
+  { label: "Spanish", value: "Spanish" },
+  { label: "French", value: "French" },
+  { label: "German", value: "German" },
+  { label: "Italian", value: "Italian" },
+  { label: "Portuguese", value: "Portuguese" },
+  { label: "Hindi", value: "Hindi" },
+  { label: "Japanese", value: "Japanese" },
+  { label: "Korean", value: "Korean" },
+  { label: "Chinese (Simplified)", value: "Simplified Chinese" },
+  { label: "Arabic", value: "Arabic" },
+  { label: "Russian", value: "Russian" },
+  { label: "English", value: "English" },
+];
+
+/**
  * Compact pill in the top bar that opens an iOS-style sheet to pick the target
  * language. Persists the choice to the backend (applies to future segments).
  */
@@ -20,13 +39,17 @@ export function LanguagePicker({
   onChange: (lang: string) => void;
 }) {
   const { user } = useGlassUser();
-  const [languages, setLanguages] = useState<Language[]>([]);
+  const [languages, setLanguages] = useState<Language[]>(FALLBACK_LANGUAGES);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/languages")
       .then((r) => r.json())
-      .then((d) => setLanguages(d.languages ?? []))
+      .then((d) => {
+        if (Array.isArray(d.languages) && d.languages.length) {
+          setLanguages(d.languages);
+        }
+      })
       .catch(() => {});
   }, []);
 

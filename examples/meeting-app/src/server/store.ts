@@ -26,7 +26,8 @@ export type StreamEvent =
       sessionId: string;
       startedAt: number;
       endedAt: number | null;
-      live: boolean;
+      /** True while the user is actively recording this meeting. */
+      recording: boolean;
     }
   | { type: "segment"; sessionId: string; segment: Segment }
   | { type: "insights"; sessionId: string; insights: Insights };
@@ -35,6 +36,7 @@ interface UserState {
   sessions: SessionRecord[];
   current: SessionRecord | null;
   listeners: Set<ServerResponse>;
+  recording: boolean;
 }
 
 function summarize(s: SessionRecord): SessionSummary {
@@ -50,18 +52,19 @@ function summarize(s: SessionRecord): SessionSummary {
 
 /**
  * In-memory bridge between the glasses meeting and the webview, keyed by SeeIt
- * user ID. Transcription is grouped into discrete meetings; each carries its
- * own LLM-derived `insights` (notes, takeaways, inferred participants).
+ * user ID. The user starts/stops a recording from the webview; while recording,
+ * incoming transcription is appended to the current meeting and summarized.
  *
  * (In-memory is fine for a single-process example. History resets on restart.)
  */
 class SessionStore {
   private readonly users = new Map<string, UserState>();
+  private counter = 0;
 
   private get(userId: string): UserState {
     let s = this.users.get(userId);
     if (!s) {
-      s = { sessions: [], current: null, listeners: new Set() };
+      s = { sessions: [], current: null, listeners: new Set(), recording: false };
       this.users.set(userId, s);
     }
     return s;
@@ -72,8 +75,20 @@ class SessionStore {
     for (const res of state.listeners) res.write(frame);
   }
 
-  startSession(userId: string, sessionId: string, startedAt: number): void {
+  private sessionEvent(state: UserState, record: SessionRecord): void {
+    this.broadcast(state, {
+      type: "session",
+      sessionId: record.sessionId,
+      startedAt: record.startedAt,
+      endedAt: record.endedAt,
+      recording: state.recording && state.current?.sessionId === record.sessionId,
+    });
+  }
+
+  /** Begin a fresh meeting recording. Returns the new session id. */
+  startRecording(userId: string, startedAt: number): string {
     const state = this.get(userId);
+    const sessionId = `m-${startedAt}-${++this.counter}`;
     const record: SessionRecord = {
       sessionId,
       startedAt,
@@ -84,28 +99,27 @@ class SessionStore {
     state.sessions.push(record);
     if (state.sessions.length > MAX_SESSIONS) state.sessions.shift();
     state.current = record;
-    this.broadcast(state, {
-      type: "session",
-      sessionId,
-      startedAt,
-      endedAt: null,
-      live: true,
-    });
+    state.recording = true;
+    this.sessionEvent(state, record);
+    return sessionId;
   }
 
-  endSession(userId: string, sessionId: string, endedAt: number): void {
+  /** Stop the current recording (the meeting record is kept). */
+  stopRecording(userId: string, endedAt: number): void {
     const state = this.users.get(userId);
-    if (!state) return;
-    const record = state.sessions.find((s) => s.sessionId === sessionId);
-    if (record) record.endedAt = endedAt;
-    if (state.current?.sessionId === sessionId) state.current = null;
-    this.broadcast(state, {
-      type: "session",
-      sessionId,
-      startedAt: record?.startedAt ?? endedAt,
-      endedAt,
-      live: false,
-    });
+    if (!state || !state.current) return;
+    state.current.endedAt = endedAt;
+    state.recording = false;
+    this.sessionEvent(state, state.current);
+  }
+
+  isRecording(userId: string): boolean {
+    return this.users.get(userId)?.recording ?? false;
+  }
+
+  currentSessionId(userId: string): string | null {
+    const state = this.users.get(userId);
+    return state?.recording ? (state.current?.sessionId ?? null) : null;
   }
 
   append(userId: string, sessionId: string, transcript: Segment): void {
@@ -152,6 +166,12 @@ class SessionStore {
     const state = this.users.get(userId);
     if (!state) return null;
     return state.current ?? state.sessions[state.sessions.length - 1] ?? null;
+  }
+
+  /** Whether `record` is the one currently being recorded. */
+  isActive(userId: string, sessionId: string): boolean {
+    const state = this.users.get(userId);
+    return !!state?.recording && state.current?.sessionId === sessionId;
   }
 
   listSessions(userId: string): SessionSummary[] {
