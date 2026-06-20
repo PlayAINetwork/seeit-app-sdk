@@ -35,6 +35,10 @@ const glass = new CalmApp({
 
 const app = express();
 
+// Behind Railway's proxy: trust X-Forwarded-Proto so req.protocol is `https`,
+// which is what we build the public audio URL from when PUBLIC_BASE_URL is unset.
+app.set('trust proxy', true);
+
 // Webhook FIRST, before any body parser — signature verification needs the raw
 // request stream.
 app.post('/webhook', (req, res) => glass.handleWebhookRequest(req, res));

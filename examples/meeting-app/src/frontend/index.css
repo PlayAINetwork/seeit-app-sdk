@@ -10,6 +10,7 @@ body,
 
 body {
   margin: 0;
+  color-scheme: dark;
   /* OLED-friendly near-black with a faint top glow. */
   background: radial-gradient(120% 80% at 50% -10%, #161620 0%, #050507 55%, #000 100%)
     fixed;
@@ -46,13 +47,5 @@ body {
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  body {
-    background: radial-gradient(120% 80% at 50% -10%, #ffffff 0%, #f2f2f7 60%, #e9e9ef 100%)
-      fixed;
-    color: #1c1c1e;
   }
 }

@@ -10,6 +10,7 @@ body,
 
 body {
   margin: 0;
+  color-scheme: dark;
   /* Deep, calm night gradient. */
   background: radial-gradient(120% 90% at 50% -10%, #122029 0%, #0a0f16 50%, #05070a 100%)
     fixed;
