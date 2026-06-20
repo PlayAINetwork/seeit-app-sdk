@@ -16,8 +16,8 @@ if (!process.env.SEEIT_APP_ID) {
   );
 }
 if (!process.env.PUBLIC_BASE_URL) {
-  console.warn(
-    '[server] PUBLIC_BASE_URL is not set — the glasses may not be able to reach the audio files in local dev. Set it to a publicly reachable origin (e.g. your tunnel URL).',
+  console.log(
+    '[server] PUBLIC_BASE_URL not set — deriving the audio URL from each request (works on Railway with trust proxy). Only set it if the glasses can’t reach the derived URL.',
   );
 }
 

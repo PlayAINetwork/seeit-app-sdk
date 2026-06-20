@@ -55,6 +55,10 @@ export function start(
   const startedAt = Date.now();
   const endsAt = startedAt + durationMin * 60_000;
 
+  console.log(
+    `[calm] play ${soundscape.id} for ${durationMin}m — glasses=${session ? "yes" : "NO"} url=${audioUrl}`,
+  );
+
   const playOnce = () => {
     try {
       session?.audio.playAudio(audioUrl);

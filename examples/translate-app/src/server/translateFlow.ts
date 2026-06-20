@@ -44,7 +44,9 @@ export async function runTranslation(
       }
     });
     put(result || "(no translation)");
-    if (opts?.speak && speakBack && result) opts.speak(result);
+    const willSpeak = Boolean(opts?.speak && speakBack && result);
+    console.log(`[translate] → ${targetLang}: "${result}" (speak=${willSpeak})`);
+    if (willSpeak) opts!.speak!(result);
   } catch (err) {
     console.error("[translate] failed:", (err as Error)?.message ?? err);
     put("(translation failed)");
