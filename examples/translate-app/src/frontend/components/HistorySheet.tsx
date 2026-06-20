@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sheet } from "./Sheet.js";
 import { ExportBar } from "./ExportBar.js";
 import { ChevronRightIcon, ChevronLeftIcon } from "../lib/icons.js";
 import { relativeTime, sessionLabel } from "../lib/format.js";
+import { dirFor } from "../lib/i18n.js";
 import { useGlassUser } from "../auth.js";
 import type { Segment } from "../hooks/useTranslateStream.js";
 
@@ -35,6 +36,8 @@ export function HistorySheet({
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [error, setError] = useState(false);
   const [detail, setDetail] = useState<SessionRecord | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const detailCtrl = useRef<AbortController | null>(null);
 
   const auth = user ? { Authorization: `Bearer ${user.sessionToken}` } : undefined;
 
@@ -43,21 +46,49 @@ export function HistorySheet({
     setSessions(null);
     setError(false);
     setDetail(null);
-    fetch("/api/sessions", { headers: auth })
+    setDetailLoading(false);
+    const ctrl = new AbortController();
+    fetch("/api/sessions", { headers: auth, signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => setSessions(d.sessions ?? []))
-      .catch(() => setError(true));
+      .catch((e) => {
+        if (e?.name !== "AbortError") setError(true);
+      });
+    return () => {
+      ctrl.abort();
+      detailCtrl.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const openSession = (id: string) => {
     if (!auth) return;
+    detailCtrl.current?.abort();
+    const ctrl = new AbortController();
+    detailCtrl.current = ctrl;
     setDetail(null);
-    fetch(`/api/sessions/${id}`, { headers: auth })
+    setDetailLoading(true);
+    fetch(`/api/sessions/${id}`, { headers: auth, signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => setDetail(d.session))
-      .catch(() => setError(true));
+      .then((d) => {
+        setDetail(d.session);
+        setDetailLoading(false);
+      })
+      .catch((e) => {
+        if (e?.name !== "AbortError") {
+          setDetailLoading(false);
+          setError(true);
+        }
+      });
   };
+
+  const back = () => {
+    detailCtrl.current?.abort();
+    setDetail(null);
+    setDetailLoading(false);
+  };
+
+  const inDetail = detail !== null || detailLoading;
 
   return (
     <Sheet
@@ -65,10 +96,10 @@ export function HistorySheet({
       onClose={onClose}
       title={detail ? sessionLabel(detail.startedAt) : "History"}
       leading={
-        detail ? (
+        inDetail ? (
           <button
-            onClick={() => setDetail(null)}
-            className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full text-accent transition active:scale-90"
+            onClick={back}
+            className="-ml-1 flex h-9 w-9 items-center justify-center rounded-full text-accent transition active:scale-90"
             aria-label="Back"
           >
             <ChevronLeftIcon className="h-5 w-5" />
@@ -76,7 +107,9 @@ export function HistorySheet({
         ) : undefined
       }
     >
-      {detail ? (
+      {detailLoading ? (
+        <DetailSkeleton />
+      ) : detail ? (
         <SessionDetail record={detail} targetLang={targetLang} />
       ) : (
         <SessionList sessions={sessions} error={error} onOpen={openSession} />
@@ -165,14 +198,38 @@ function SessionDetail({
         <div className="space-y-4">
           {finals.map((s) => (
             <div key={s.segmentId}>
-              <p className="text-[13px] text-zinc-500">{s.original}</p>
-              <p className="text-[16px] leading-relaxed text-zinc-100">
+              {s.direction && (
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                  {s.direction}
+                </p>
+              )}
+              <p dir={dirFor(s.sourceLang)} className="text-[13px] text-zinc-500">
+                {s.original}
+              </p>
+              <p
+                dir={dirFor(s.targetLang ?? targetLang)}
+                className="text-[16px] leading-relaxed text-zinc-100"
+              >
                 {s.translated ?? "—"}
               </p>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="h-12 animate-pulse rounded-2xl bg-white/[0.05]" />
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="space-y-1.5">
+          <div className="h-3 w-1/3 animate-pulse rounded bg-white/[0.05]" />
+          <div className="h-4 w-3/4 animate-pulse rounded bg-white/[0.06]" />
+        </div>
+      ))}
     </div>
   );
 }

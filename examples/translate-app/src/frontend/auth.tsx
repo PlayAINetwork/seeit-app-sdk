@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { lsGet, lsSet, lsRemove } from "./lib/storage.js";
 
 export interface GlassUser {
   userId: string;
@@ -55,9 +56,9 @@ export function GlassAuthProvider({ children }: { children: ReactNode }) {
           sessionToken: String(claims.sessionToken ?? ""),
           ...(typeof claims.name === "string" ? { name: claims.name } : {}),
         };
-        localStorage.setItem(LS_USER_ID, next.userId);
-        localStorage.setItem(LS_SESSION_TOKEN, next.sessionToken);
-        if (next.name) localStorage.setItem(LS_NAME, next.name);
+        lsSet(LS_USER_ID, next.userId);
+        lsSet(LS_SESSION_TOKEN, next.sessionToken);
+        if (next.name) lsSet(LS_NAME, next.name);
         setUser(next);
       } catch {
         // malformed token — fall through to the unauthenticated state
@@ -65,9 +66,9 @@ export function GlassAuthProvider({ children }: { children: ReactNode }) {
       // Scrub the token out of the address bar.
       window.history.replaceState({}, "", window.location.pathname);
     } else {
-      const userId = localStorage.getItem(LS_USER_ID);
-      const sessionToken = localStorage.getItem(LS_SESSION_TOKEN);
-      const name = localStorage.getItem(LS_NAME) ?? undefined;
+      const userId = lsGet(LS_USER_ID);
+      const sessionToken = lsGet(LS_SESSION_TOKEN);
+      const name = lsGet(LS_NAME) ?? undefined;
       if (userId && sessionToken) {
         setUser({ userId, sessionToken, ...(name ? { name } : {}) });
       }
@@ -76,9 +77,9 @@ export function GlassAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = () => {
-    localStorage.removeItem(LS_USER_ID);
-    localStorage.removeItem(LS_SESSION_TOKEN);
-    localStorage.removeItem(LS_NAME);
+    lsRemove(LS_USER_ID);
+    lsRemove(LS_SESSION_TOKEN);
+    lsRemove(LS_NAME);
     setUser(null);
   };
 

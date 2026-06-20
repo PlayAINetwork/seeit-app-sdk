@@ -5,6 +5,7 @@ import {
   translationToText,
   type BilingualLine,
 } from "../lib/format.js";
+import { useToast } from "./Toast.js";
 
 /**
  * Copy / Save / Share toolbar for the current session. Pure client-side: builds
@@ -20,6 +21,7 @@ export function ExportBar({
   lines: BilingualLine[];
 }) {
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const disabled = lines.length === 0;
 
   const text = () => translationToText(startedAt, targetLang, lines);
@@ -32,7 +34,7 @@ export function ExportBar({
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
-      /* clipboard blocked — ignore */
+      toast("Copy blocked by the browser — try Save instead", "error");
     }
   };
 

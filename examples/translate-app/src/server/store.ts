@@ -1,5 +1,10 @@
 import type { ServerResponse } from "node:http";
-import { DEFAULT_LANGUAGE } from "./languages.js";
+import {
+  DEFAULT_LANGUAGE,
+  DEFAULT_LANG_A,
+  DEFAULT_LANG_B,
+  type Mode,
+} from "./languages.js";
 
 /** How many past sessions to keep per user (in memory). */
 const MAX_SESSIONS = 25;
@@ -13,13 +18,22 @@ export interface Segment {
   translated: string | null;
   /** Detected source language display name, e.g. "Spanish" (null if unknown). */
   sourceLang: string | null;
+  /** Per-segment target language (conversation mode); null for one-way. */
+  targetLang?: string | null;
+  /** Direction badge, e.g. "ES → HI" (conversation mode only). */
+  direction?: string | null;
   isFinal: boolean;
 }
 
 export interface Settings {
-  /** Target language (the name fed to the model). */
+  mode: Mode;
+  /** One-way target language. */
   targetLang: string;
-  /** Speak each final translation back to the glasses. */
+  /** Conversation language A. */
+  langA: string;
+  /** Conversation language B. */
+  langB: string;
+  /** Speak each final translation back (one-way; conversation always speaks). */
   speakBack: boolean;
 }
 
@@ -56,6 +70,16 @@ interface UserState {
   settings: Settings;
 }
 
+function defaultSettings(): Settings {
+  return {
+    mode: "oneway",
+    targetLang: DEFAULT_LANGUAGE,
+    langA: DEFAULT_LANG_A,
+    langB: DEFAULT_LANG_B,
+    speakBack: true,
+  };
+}
+
 function summarize(s: SessionRecord): SessionSummary {
   const first = s.segments.find((seg) => seg.isFinal && seg.original.trim());
   return {
@@ -84,16 +108,25 @@ class SessionStore {
         sessions: [],
         current: null,
         listeners: new Set(),
-        settings: { targetLang: DEFAULT_LANGUAGE, speakBack: true },
+        settings: defaultSettings(),
       };
       this.users.set(userId, s);
     }
     return s;
   }
 
+  /** Write to every listener; drop any whose socket has gone away. */
   private broadcast(state: UserState, event: StreamEvent): void {
     const frame = `data: ${JSON.stringify(event)}\n\n`;
-    for (const res of state.listeners) res.write(frame);
+    const dead: ServerResponse[] = [];
+    for (const res of state.listeners) {
+      try {
+        res.write(frame);
+      } catch {
+        dead.push(res);
+      }
+    }
+    for (const res of dead) state.listeners.delete(res);
   }
 
   // --- settings -------------------------------------------------------------
@@ -102,16 +135,12 @@ class SessionStore {
     return { ...this.get(userId).settings };
   }
 
-  setLanguage(userId: string, lang: string): void {
+  /** Apply a validated patch (validation happens in the API) and broadcast once. */
+  updateSettings(userId: string, patch: Partial<Settings>): Settings {
     const state = this.get(userId);
-    state.settings.targetLang = lang;
+    state.settings = { ...state.settings, ...patch };
     this.broadcast(state, { type: "settings", settings: { ...state.settings } });
-  }
-
-  setSpeakBack(userId: string, on: boolean): void {
-    const state = this.get(userId);
-    state.settings.speakBack = on;
-    this.broadcast(state, { type: "settings", settings: { ...state.settings } });
+    return { ...state.settings };
   }
 
   // --- sessions -------------------------------------------------------------
@@ -203,6 +232,25 @@ class SessionStore {
 
   removeListener(userId: string, res: ServerResponse): void {
     this.users.get(userId)?.listeners.delete(res);
+  }
+
+  /** End every open SSE response (used for graceful shutdown). */
+  endAllListeners(): void {
+    for (const state of this.users.values()) {
+      for (const res of state.listeners) {
+        try {
+          res.end();
+        } catch {
+          /* already closed */
+        }
+      }
+      state.listeners.clear();
+    }
+  }
+
+  /** Test helper: wipe all state. */
+  __reset(): void {
+    this.users.clear();
   }
 }
 

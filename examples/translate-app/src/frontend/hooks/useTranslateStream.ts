@@ -7,16 +7,23 @@ export type StreamStatus =
   | "reconnecting"
   | "offline";
 
+export type Mode = "oneway" | "conversation";
+
 export interface Segment {
   segmentId: string;
   original: string;
   translated: string | null;
   sourceLang: string | null;
+  targetLang?: string | null;
+  direction?: string | null;
   isFinal: boolean;
 }
 
 export interface Settings {
+  mode: Mode;
   targetLang: string;
+  langA: string;
+  langB: string;
   speakBack: boolean;
 }
 
@@ -50,10 +57,12 @@ export function useTranslateStream(token: string | undefined) {
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<StreamStatus>("connecting");
+  const [authExpired, setAuthExpired] = useState(false);
 
   const esRef = useRef<EventSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptsRef = useRef(0);
+  const probedRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const tokenRef = useRef(token);
   tokenRef.current = token;
@@ -68,6 +77,7 @@ export function useTranslateStream(token: string | undefined) {
 
     es.onopen = () => {
       attemptsRef.current = 0;
+      probedRef.current = false;
       setStatus((s) => (s === "live" ? s : "idle"));
     };
 
@@ -114,12 +124,28 @@ export function useTranslateStream(token: string | undefined) {
       setStatus(attemptsRef.current >= OFFLINE_AFTER ? "offline" : "reconnecting");
       const delay = Math.min(MAX_BACKOFF, 600 * 2 ** (attemptsRef.current - 1));
       timerRef.current = setTimeout(connect, delay);
+
+      // EventSource hides the HTTP status, so once we've been failing for a
+      // while, probe /api/me to distinguish "server down" from "token expired".
+      if (attemptsRef.current >= OFFLINE_AFTER && !probedRef.current) {
+        probedRef.current = true;
+        const t = tokenRef.current;
+        if (t) {
+          fetch("/api/me", { headers: { Authorization: `Bearer ${t}` } })
+            .then((r) => {
+              if (r.status === 401) setAuthExpired(true);
+            })
+            .catch(() => {});
+        }
+      }
     };
   }, []);
 
   const reconnect = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     attemptsRef.current = 0;
+    probedRef.current = false;
+    setAuthExpired(false);
     setStatus("connecting");
     connect();
   }, [connect]);
@@ -135,5 +161,5 @@ export function useTranslateStream(token: string | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, connect]);
 
-  return { segments, session, settings, status, reconnect, setSettings };
+  return { segments, session, settings, status, authExpired, reconnect, setSettings };
 }

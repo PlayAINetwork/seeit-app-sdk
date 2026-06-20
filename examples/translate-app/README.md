@@ -84,9 +84,53 @@ For local testing, expose the port with a tunnel (e.g. `ngrok http 5002`).
 3. Tap the language pill to switch — **new** sentences translate to the new
    language (past ones keep their text).
 
+## Conversation mode (two-way interpreter)
+
+Open **Settings → Mode → Conversation** and pick a language pair (A & B, e.g.
+Spanish ↔ Hindi). From then on every finalized utterance is auto-detected as A or
+B, translated into the **other** language, shown with a direction badge ("ES → HI"),
+and **spoken aloud** on the glasses. It runs continuously, alternating direction
+turn-by-turn — a real-time interpreter for a dialogue.
+
+Detection uses a single `gpt-4o-mini` JSON call (`{"from","translation"}`), which is
+robust even when the two languages share a script (unlike offline detection). Speech
+is serialized through a small queue so rapid turns don't slur together.
+
+## API
+
+| Route | Notes |
+|---|---|
+| `GET /health`, `GET /ready` | Liveness / readiness (503 until `OPENAI_API_KEY` set). Public. |
+| `GET /api/me` | User + current `settings`. |
+| `GET /api/languages` | Static language list (public). |
+| `POST /api/settings` | `{ mode, targetLang, langA, langB, speakBack }` — every present field validated (400 on invalid). |
+| `POST /api/language` | One-way target (back-compat). |
+| `POST /api/retry/:id` | Re-translate one segment. Rate-limited per user (429). |
+| `GET /api/transcripts` (SSE) | Live stream: `settings` → `session` → `segment` frames. |
+| `GET /api/sessions[/:id]` | History list + one session. |
+
+## Tests
+
+```bash
+bun test       # unit tests: translator, store, langdetect, conversation routing, speak queue
+```
+
+Tests inject a fake OpenAI client (`__setOpenAIForTests`) so they never hit the network.
+
 ## Notes
 
 - Translation is **per sentence** (each finalized segment), so it has no
   cross-sentence context — fine for live captions, not literary translation.
 - The relay only delivers the **user's** speech, so the agent's voice never gets
   translated.
+
+### Known limitations (intentional for an example)
+
+- **In-memory store** — history/settings reset on restart; single-process only (no
+  Redis/horizontal scaling).
+- **No metrics/observability** beyond logs; **no real persistence**.
+- The speak-queue gap is **heuristic** — the SDK's `speak()` gives no
+  "finished speaking" signal, so a long utterance can still overlap the next.
+- The SDK's published `dist` typings cause three pre-existing `typecheck` errors
+  (constructor / `handleWebhookRequest` / `onTranscription` typed `any`); they don't
+  affect runtime or build.

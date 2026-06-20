@@ -1,27 +1,30 @@
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import type { Segment, StreamStatus } from "../hooks/useTranslateStream.js";
+import type { Segment, StreamStatus, Mode } from "../hooks/useTranslateStream.js";
 import type { ViewMode } from "./ViewModeControl.js";
 import { GlobeIcon, RetryIcon } from "../lib/icons.js";
+import { dirFor } from "../lib/i18n.js";
 
 const FAILED = "(translation failed)";
 
 /**
  * Focus stage: older translations fade into a scrolling history, the latest
  * finalized line sits in focus (big), and the in-progress sentence previews at
- * the bottom. The view mode controls whether we show original, translation, or
- * both.
+ * the bottom. View mode controls original/translation/both; conversation mode
+ * adds a per-line direction badge ("ES → HI").
  */
 export function TranslateView({
   segments,
   status,
   viewMode,
+  mode,
   targetLang,
   onRetry,
 }: {
   segments: Segment[];
   status: StreamStatus;
   viewMode: ViewMode;
+  mode: Mode;
   targetLang: string;
   onRetry: (segmentId: string) => void;
 }) {
@@ -42,7 +45,7 @@ export function TranslateView({
   const showTranslation = viewMode !== "original";
   const empty = finals.length === 0 && !interim;
 
-  if (empty) return <EmptyState status={status} />;
+  if (empty) return <EmptyState status={status} mode={mode} />;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-white/[0.07] bg-white/[0.03]">
@@ -53,11 +56,21 @@ export function TranslateView({
       >
         {history.map((s) => (
           <div key={s.segmentId} className="opacity-55">
+            {s.direction && (
+              <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600">
+                {s.direction}
+              </p>
+            )}
             {showOriginal && (
-              <p className="text-[12px] text-zinc-500">{s.original}</p>
+              <p dir={dirFor(s.sourceLang)} className="text-[12px] text-zinc-500">
+                {s.original}
+              </p>
             )}
             {showTranslation && (
-              <p className="text-[15px] leading-snug text-zinc-200">
+              <p
+                dir={dirFor(s.targetLang ?? targetLang)}
+                className="text-[15px] leading-snug text-zinc-200"
+              >
                 {s.translated ?? "…"}
               </p>
             )}
@@ -68,18 +81,34 @@ export function TranslateView({
       {/* Current — the focus */}
       {current && (
         <div className="border-t border-white/[0.07] px-5 pb-5 pt-4">
-          <SourceTarget sourceLang={current.sourceLang} targetLang={targetLang} />
+          <SourceTarget
+            direction={current.direction}
+            sourceLang={current.sourceLang}
+            targetLang={current.targetLang ?? targetLang}
+          />
 
           {showOriginal && (
-            <p className="mt-2 text-[14px] text-zinc-400">{current.original}</p>
+            <p
+              dir={dirFor(current.sourceLang)}
+              className="mt-2 text-[14px] text-zinc-400"
+            >
+              {current.original}
+            </p>
           )}
 
           {showTranslation && (
-            <CurrentTranslation segment={current} onRetry={onRetry} />
+            <CurrentTranslation
+              segment={current}
+              targetLang={targetLang}
+              onRetry={onRetry}
+            />
           )}
 
           {!showTranslation && (
-            <p className="mt-1 text-[26px] font-semibold leading-tight tracking-tight text-white">
+            <p
+              dir={dirFor(current.sourceLang)}
+              className="mt-1 text-[26px] font-semibold leading-tight tracking-tight text-white"
+            >
               {current.original}
             </p>
           )}
@@ -93,6 +122,7 @@ export function TranslateView({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            dir={dirFor(interim.sourceLang)}
             className="px-5 pb-5 text-[15px] italic text-zinc-500"
           >
             {interim.original}
@@ -106,9 +136,11 @@ export function TranslateView({
 
 function CurrentTranslation({
   segment,
+  targetLang,
   onRetry,
 }: {
   segment: Segment;
+  targetLang: string;
   onRetry: (id: string) => void;
 }) {
   if (segment.translated === FAILED) {
@@ -117,6 +149,7 @@ function CurrentTranslation({
         <p className="text-[15px] text-rose-300">Translation failed</p>
         <button
           onClick={() => onRetry(segment.segmentId)}
+          aria-label="Retry translation"
           className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[13px] font-medium text-white transition active:scale-95 hover:bg-white/10"
         >
           <RetryIcon className="h-4 w-4" />
@@ -135,29 +168,35 @@ function CurrentTranslation({
   }
 
   return (
-    <p className="mt-1 text-[28px] font-semibold leading-tight tracking-tight text-white">
+    <p
+      dir={dirFor(segment.targetLang ?? targetLang)}
+      className="mt-1 text-[28px] font-semibold leading-tight tracking-tight text-white"
+    >
       {segment.translated}
     </p>
   );
 }
 
 function SourceTarget({
+  direction,
   sourceLang,
   targetLang,
 }: {
+  direction?: string | null;
   sourceLang: string | null;
   targetLang: string;
 }) {
   return (
     <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-500">
       <GlobeIcon className="h-3.5 w-3.5 text-accent" />
-      {sourceLang ? `${sourceLang} → ${targetLang}` : targetLang}
+      {direction ?? (sourceLang ? `${sourceLang} → ${targetLang}` : targetLang)}
     </div>
   );
 }
 
-function EmptyState({ status }: { status: StreamStatus }) {
+function EmptyState({ status, mode }: { status: StreamStatus; mode: Mode }) {
   const live = status === "live";
+  const conv = mode === "conversation";
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-3xl border border-white/[0.07] bg-white/[0.03] px-6 text-center">
       <div
@@ -168,12 +207,12 @@ function EmptyState({ status }: { status: StreamStatus }) {
         <GlobeIcon className={`h-7 w-7 ${live ? "animate-breathe" : ""}`} />
       </div>
       <p className="text-[17px] font-semibold text-white">
-        {live ? "Listening…" : "Ready to translate"}
+        {live ? "Listening…" : conv ? "Ready to interpret" : "Ready to translate"}
       </p>
       <p className="mt-1.5 max-w-[16rem] text-[14px] leading-relaxed text-zinc-500">
-        {live
-          ? "Speak in any language and the translation appears here instantly."
-          : "Your live translation will show up here as soon as you start talking."}
+        {conv
+          ? "Speak in either language — each turn is translated into the other and spoken aloud."
+          : "Speak in any language and the translation appears here instantly."}
       </p>
     </div>
   );
