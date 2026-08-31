@@ -1,6 +1,6 @@
 {
   "name": "@seeit/app-sdk",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Node.js SDK for building apps on the SeeIt App platform",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -15,6 +15,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "prepare": "tsup"
   },
@@ -25,6 +26,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.14",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.12"
   },

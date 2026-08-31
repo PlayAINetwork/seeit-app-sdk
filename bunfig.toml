@@ -1,0 +1,7 @@
+[test]
+# Scope the runner to the SDK. The examples are standalone projects with their
+# own dependencies and their own `bun test` script; without this, running tests
+# at the root sweeps them in and they fail on packages that were never installed
+# here. Note this must be a config key — a positional `bun test src` is a
+# substring filter and still matches `examples/*/src/`.
+root = "./src"

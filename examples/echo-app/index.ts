@@ -68,5 +68,10 @@ class EchoApp extends GlassAppServer {
   }
 }
 
-const app = new EchoApp({ port: 3000 });
+// Local demo only. A real app reads the secret SeeIt issued for it from the
+// environment and never falls back to a literal.
+const app = new EchoApp({
+  webhookSecret: process.env.WEBHOOK_SECRET ?? "whsec_localdev",
+  port: 3000,
+});
 app.start().catch(console.error);

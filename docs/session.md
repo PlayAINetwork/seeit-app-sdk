@@ -6,11 +6,11 @@
 User starts app on glasses
         │
         ▼
-Backend POSTs session.started
- { type, appId, userId, roomId, url, token, timestamp }
+Backend POSTs session.started  (signed — see ./webhooks.md)
+ { type, appId, userId, roomId, relayUrl, relayToken, timestamp }
         │
         ▼
-SDK connects to LiveKit room
+SDK connects to the SeeIt relay
         │
         ▼
 onSession(session) called
@@ -38,10 +38,10 @@ session.disconnect() called automatically
 | Property | Type | Description |
 |---|---|---|
 | `sessionId` | `string` | Unique session ID (= `roomId`) |
-| `roomId` | `string` | LiveKit room ID |
+| `roomId` | `string` | Room ID for this session |
 | `userId` | `string` | SeeIt user ID of the glasses wearer |
 | `appId` | `string` | Your registered app ID |
-| `isConnected` | `boolean` | Whether the LiveKit room is currently connected |
+| `isConnected` | `boolean` | Whether the relay connection is currently open |
 | `events` | `EventsModule` | Transcription and data-channel events |
 | `audio` | `AudioModule` | Audio playback and microphone access |
 | `camera` | `CameraModule` | Camera video track |
@@ -66,7 +66,7 @@ Available events: `"disconnected"` | `"reconnected"`
 
 #### `session.disconnect(): Promise<void>`
 
-Manually disconnect from the LiveKit room. Stops any playing audio and
+Manually disconnect from the relay. Stops any playing audio and
 releases all resources. Called automatically on `session.ended`.
 
 ---
@@ -88,7 +88,7 @@ instead with `handleWebhookRequest(req, res)` and **don't** call `start()`:
 ```ts
 import express from "express";
 
-const glass = new MyApp();              // note: no glass.start()
+const glass = new MyApp({ webhookSecret: process.env.WEBHOOK_SECRET! }); // no glass.start()
 const app = express();
 
 // Register BEFORE any body parser — signature verification needs the raw stream.
@@ -98,5 +98,12 @@ app.use(express.json());                // other routes can parse JSON
 app.listen(3000);
 ```
 
+If you can't control that ordering, mount `express.raw({ type: "*/*" })` on the
+webhook route instead — the SDK will verify against the buffer it leaves behind.
+Ordering matters: a parser that consumes the stream first makes the signature
+uncheckable, and the SDK answers 500 with an explanation rather than a silent
+401.
+
 This keeps your webhook and webview on a single port/origin. See
-[examples/webview-app](../examples/webview-app) for a full reference.
+[examples/transcribe-app](../examples/transcribe-app) for a full reference, and
+[Webhooks](./webhooks.md) for the signing contract.

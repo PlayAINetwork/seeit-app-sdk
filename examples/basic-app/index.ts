@@ -6,10 +6,12 @@ import { GlassAppServer, GlassAppSession } from '../../src/index.js';
  * Run:
  *   bun run examples/basic-app/index.ts
  *
- * Then POST a mock session.started payload:
- *   curl -X POST http://localhost:3000/webhook \
- *     -H "Content-Type: application/json" \
- *     -d '{"type":"session.started","appId":"my-app","userId":"user-1","roomId":"room-123","url":"wss://live.example.com","token":"<livekit-token>","timestamp":"2024-01-01T00:00:00Z"}'
+ * Then send it a signed event. Deliveries are HMAC-signed over
+ * "<timestamp>.<body>", so a plain curl won't do — use the helper:
+ *   node examples/send-test-webhook.mjs endpoint.verification
+ *   node examples/send-test-webhook.mjs session.started
+ *
+ * Both default to the same local dev secret this file uses.
  */
 class BasicApp extends GlassAppServer {
   protected async onSession(session: GlassAppSession): Promise<void> {
@@ -38,5 +40,10 @@ class BasicApp extends GlassAppServer {
   }
 }
 
-const app = new BasicApp({ port: 5001 });
+// Local demo only. A real app reads the secret SeeIt issued for it from the
+// environment and never falls back to a literal.
+const app = new BasicApp({
+  webhookSecret: process.env.WEBHOOK_SECRET ?? 'whsec_localdev',
+  port: 5001,
+});
 app.start().catch(console.error);

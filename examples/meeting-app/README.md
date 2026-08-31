@@ -55,7 +55,7 @@ cp .env.example .env     # fill in SEEIT_APP_ID, SEEIT_JWKS_URL, OPENAI_API_KEY
 | `SEEIT_APP_ID` | Your app's UUID. Tokens must carry it as `aud`. |
 | `SEEIT_JWKS_URL` | SeeIt's public keys, e.g. `http://localhost:3000/glass/.well-known/jwks.json`. |
 | `OPENAI_API_KEY` | Summarizes the meeting + infers participants (`gpt-4o-mini`). |
-| `WEBHOOK_SECRET` | Optional — if set in the dev console. |
+| `WEBHOOK_SECRET` | **Required.** The `whsec_…` signing secret from the dev console, shown once at registration. |
 
 ## Run
 
@@ -75,6 +75,17 @@ In the SeeIt developer console, point both URLs at this server (same origin):
 
 - **Webhook URL** → `https://<your-host>/webhook`
 - **Webview URL** → `https://<your-host>/`
+
+Copy the signing secret shown at registration into `WEBHOOK_SECRET`, deploy,
+then verify the endpoint — **no events are delivered until this passes**:
+
+```bash
+curl -X POST https://api.seeit.ai/glass/apps/$APP_ID/webhook/verify \
+  -H "Cookie: $YOUR_SESSION_COOKIE"
+```
+
+Changing the webhook URL or rotating the secret clears verification, so re-run
+it after either.
 
 For local testing, expose the port with a tunnel (e.g. `ngrok http 5003`).
 

@@ -70,7 +70,7 @@ cp .env.example .env     # fill in SEEIT_APP_ID, SEEIT_JWKS_URL, PUBLIC_BASE_URL
 | `SEEIT_APP_ID` | Your app's UUID. Tokens must carry it as `aud`. |
 | `SEEIT_JWKS_URL` | SeeIt's public keys, e.g. `http://localhost:3000/glass/.well-known/jwks.json`. |
 | `PUBLIC_BASE_URL` | Public origin the **glasses** use to fetch `/audio/*.wav` (your deploy or tunnel URL). |
-| `WEBHOOK_SECRET` | Optional — if set in the dev console. |
+| `WEBHOOK_SECRET` | **Required.** The `whsec_…` signing secret from the dev console, shown once at registration. |
 
 > Playing audio on the glasses requires **ffmpeg** available to the SeeIt backend
 > that fetches the URL (per the SDK's getting-started notes).

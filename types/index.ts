@@ -21,23 +21,48 @@ export interface SessionEndedPayload {
   timestamp: string;
 }
 
-export type WebhookPayload = SessionStartedPayload | SessionEndedPayload;
+/**
+ * Ownership handshake. SeeIt POSTs this when you call
+ * `POST /glass/apps/:appId/webhook/verify`, and your endpoint must reply 200
+ * echoing the challenge back. `GlassAppServer` answers it for you.
+ */
+export interface EndpointVerificationPayload {
+  type: "endpoint.verification";
+  /** Random hex string your endpoint must echo back. */
+  challenge: string;
+}
+
+export type WebhookPayload =
+  | SessionStartedPayload
+  | SessionEndedPayload
+  | EndpointVerificationPayload;
 
 // ---------------------------------------------------------------------------
 // Server options
 // ---------------------------------------------------------------------------
 
 export interface GlassAppServerOptions {
+  /**
+   * Your app's webhook signing secret (`whsec_…`), issued when you register the
+   * app and shown only once. Rotate it with
+   * `POST /glass/apps/:appId/webhook/rotate-secret`.
+   *
+   * Required. Every delivery from SeeIt is signed, and an endpoint that cannot
+   * check the signature will accept forged session events from anyone who
+   * learns its URL. Deliveries carry `x-seeit-timestamp` and
+   * `x-seeit-signature: v1=<hex>`, where the signature is
+   * `HMAC-SHA256(secret, "<timestamp>.<raw body>")`; requests that fail
+   * verification, or fall outside the replay window, are rejected with 401.
+   */
+  webhookSecret: string;
   /** HTTP port to listen on. Default: 3000 */
   port?: number;
   /** Path for webhook POST requests. Default: "/webhook" */
   webhookPath?: string;
-  /**
-   * Optional secret for HMAC-SHA256 signature verification.
-   * When set, requests must include an `x-seeit-signature` header
-   * with `sha256=<hex>` computed over the raw body using this secret.
-   */
-  webhookSecret?: string;
+  /** Replay window in seconds. Default: 300 — matches the SeeIt backend. */
+  webhookToleranceSeconds?: number;
+  /** Max accepted webhook body size in bytes. Default: 1 MiB. Larger → 413. */
+  maxWebhookBodyBytes?: number;
 }
 
 // ---------------------------------------------------------------------------

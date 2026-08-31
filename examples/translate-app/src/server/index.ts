@@ -29,11 +29,15 @@ process.on('uncaughtException', (err) =>
 
 // The glass app — note we do NOT call .start(); its webhook is mounted below so
 // the whole app lives on a single port.
-const glass = new TranslateApp({
-  ...(process.env.WEBHOOK_SECRET
-    ? { webhookSecret: process.env.WEBHOOK_SECRET }
-    : {}),
-});
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+if (!WEBHOOK_SECRET) {
+  console.error(
+    '[server] WEBHOOK_SECRET is not set. SeeIt signs every webhook it delivers, so without the secret this endpoint cannot verify deliveries or pass the ownership handshake — no events would ever arrive. Copy .env.example to .env.',
+  );
+  process.exit(1);
+}
+
+const glass = new TranslateApp({ webhookSecret: WEBHOOK_SECRET });
 
 const app = express();
 

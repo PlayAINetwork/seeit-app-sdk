@@ -1,7 +1,15 @@
 import { createServer, IncomingMessage, ServerResponse, Server } from "node:http";
-import { createHmac, timingSafeEqual } from "node:crypto";
-import type { GlassAppServerOptions, WebhookPayload, SessionStartedPayload } from "../types/index.js";
+import type {
+  GlassAppServerOptions,
+  WebhookPayload,
+  SessionStartedPayload,
+  SessionEndedPayload,
+} from "../types/index.js";
 import { GlassAppSession, createSession } from "./GlassAppSession.js";
+import { verifyWebhookSignature } from "./auth/verifyWebhookSignature.js";
+
+/** Real payloads are ~1 KB; this is only here to bound an abusive request. */
+const DEFAULT_MAX_BODY_BYTES = 1_048_576;
 
 /**
  * Base class for SeeIt Glass apps.
@@ -17,20 +25,34 @@ import { GlassAppSession, createSession } from "./GlassAppSession.js";
  *     });
  *   }
  * }
- * new MyApp({ port: 3000 }).start();
+ * new MyApp({ webhookSecret: process.env.WEBHOOK_SECRET!, port: 3000 }).start();
  * ```
  */
 export abstract class GlassAppServer {
   private readonly port: number;
   private readonly webhookPath: string;
-  private readonly webhookSecret: string | undefined;
+  private readonly webhookSecret: string;
+  private readonly webhookToleranceSeconds: number | undefined;
+  private readonly maxWebhookBodyBytes: number;
   private readonly activeSessions = new Map<string, GlassAppSession>();
   private server: Server | null = null;
 
-  constructor(options: GlassAppServerOptions = {}) {
+  constructor(options: GlassAppServerOptions) {
+    if (!options?.webhookSecret) {
+      throw new Error(
+        "GlassAppServer: webhookSecret is required. Every webhook SeeIt delivers " +
+          "is signed, and an unverified endpoint will accept forged session events " +
+          "from anyone who learns its URL. Your app's secret is shown once when you " +
+          "register it; issue a new one with POST /glass/apps/:appId/webhook/rotate-secret."
+      );
+    }
+
     this.port = options.port ?? 3000;
     this.webhookPath = options.webhookPath ?? "/webhook";
     this.webhookSecret = options.webhookSecret;
+    this.webhookToleranceSeconds = options.webhookToleranceSeconds;
+    this.maxWebhookBodyBytes =
+      options.maxWebhookBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   }
 
   /**
@@ -101,9 +123,14 @@ export abstract class GlassAppServer {
    * webhook path **before** any body parser — signature verification needs the
    * raw request stream.
    *
+   * If you can't control that ordering, a raw body parser (`express.raw` with a
+   * catch-all type) on the webhook route works too — the buffer it leaves
+   * behind is still verifiable.
+   *
    * @example
    * ```ts
-   * const glass = new MyApp();              // do NOT call glass.start()
+   * // do NOT call glass.start()
+   * const glass = new MyApp({ webhookSecret: process.env.WEBHOOK_SECRET! });
    * app.post("/webhook", (req, res) => glass.handleWebhookRequest(req, res));
    * ```
    */
@@ -111,31 +138,73 @@ export abstract class GlassAppServer {
     req: IncomingMessage,
     res: ServerResponse
   ): Promise<void> {
-    let body: Buffer;
+    let raw: Buffer;
     try {
-      body = await readBody(req);
-    } catch {
+      raw = await readRawBody(req, this.maxWebhookBodyBytes);
+    } catch (err) {
+      if (err instanceof WebhookBodyError && err.kind === "too_large") {
+        res.writeHead(413).end("Payload too large");
+        return;
+      }
+      if (err instanceof WebhookBodyError && err.kind === "already_consumed") {
+        console.error(
+          "[GlassAppServer] The request body was consumed before the webhook handler " +
+            "ran, so the signature cannot be verified. Mount handleWebhookRequest " +
+            'BEFORE express.json(), or use express.raw({ type: "*/*" }) on the ' +
+            "webhook route."
+        );
+        res.writeHead(500).end("Webhook misconfigured");
+        return;
+      }
       res.writeHead(400).end("Bad request");
       return;
     }
 
-    if (this.webhookSecret) {
-      const sig = req.headers["x-seeit-signature"];
-      if (!verifySignature(body, this.webhookSecret, String(sig ?? ""))) {
-        res.writeHead(401).end("Unauthorized");
-        return;
-      }
+    const verification = verifyWebhookSignature(raw, req.headers, {
+      secret: this.webhookSecret,
+      ...(this.webhookToleranceSeconds !== undefined
+        ? { toleranceSeconds: this.webhookToleranceSeconds }
+        : {}),
+    });
+    if (!verification.ok) {
+      console.warn(
+        `[GlassAppServer] Rejected webhook: ${verification.reason}`
+      );
+      res.writeHead(401).end("Unauthorized");
+      return;
     }
 
-    let payload: WebhookPayload;
+    let parsed: unknown;
     try {
-      payload = JSON.parse(body.toString()) as WebhookPayload;
+      parsed = JSON.parse(raw.toString("utf8"));
     } catch {
       res.writeHead(400).end("Invalid JSON");
       return;
     }
 
+    const payload = asWebhookPayload(parsed);
+
+    // Ownership handshake. Answered only after the signature checked out —
+    // echoing an unverified challenge would let anyone who knows this URL prove
+    // "ownership" of it to SeeIt.
+    if (payload?.type === "endpoint.verification") {
+      if (typeof payload.challenge !== "string" || payload.challenge === "") {
+        res.writeHead(400).end("Missing challenge");
+        return;
+      }
+      console.log(
+        "[GlassAppServer] Answered SeeIt endpoint verification challenge"
+      );
+      res
+        .writeHead(200, { "Content-Type": "application/json" })
+        .end(JSON.stringify({ challenge: payload.challenge }));
+      return;
+    }
+
     res.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true}');
+
+    // Unknown type — a newer backend event. Acked above, nothing to dispatch.
+    if (!payload) return;
 
     // Handle async — errors are logged, never crash the server
     this.handleWebhook(payload).catch((err: unknown) => {
@@ -143,10 +212,12 @@ export abstract class GlassAppServer {
     });
   }
 
-  private async handleWebhook(payload: WebhookPayload): Promise<void> {
+  private async handleWebhook(
+    payload: SessionStartedPayload | SessionEndedPayload
+  ): Promise<void> {
     if (payload.type === "session.started") {
       await this.handleSessionStarted(payload);
-    } else if (payload.type === "session.ended") {
+    } else {
       await this.handleSessionEnded(payload.appId, payload.userId);
     }
   }
@@ -205,26 +276,69 @@ export abstract class GlassAppServer {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function readBody(req: IncomingMessage): Promise<Buffer> {
+class WebhookBodyError extends Error {
+  constructor(readonly kind: "too_large" | "already_consumed") {
+    super(kind);
+  }
+}
+
+/**
+ * Read the exact bytes that were received. Signature verification is over the
+ * raw body, so anything that reserializes a parsed object will not match.
+ */
+function readRawBody(
+  req: IncomingMessage,
+  maxBytes: number
+): Promise<Buffer> {
+  // A raw-body parser ran ahead of us (express.raw(), or middleware that stashes
+  // req.rawBody). Those bytes are still verifiable.
+  const parsed = (req as { body?: unknown }).body;
+  if (Buffer.isBuffer(parsed)) return Promise.resolve(parsed);
+
+  const stashed = (req as { rawBody?: unknown }).rawBody;
+  if (Buffer.isBuffer(stashed)) return Promise.resolve(stashed);
+  if (typeof stashed === "string") {
+    return Promise.resolve(Buffer.from(stashed, "utf8"));
+  }
+
+  // A JSON parser drained the stream and kept nothing we can verify. Say so
+  // loudly rather than failing the signature check for no visible reason.
+  if (req.readableEnded) {
+    return Promise.reject(new WebhookBodyError("already_consumed"));
+  }
+
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return Promise.reject(new WebhookBodyError("too_large"));
+  }
+
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > maxBytes) {
+        req.destroy();
+        reject(new WebhookBodyError("too_large"));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
 
-function verifySignature(
-  body: Buffer,
-  secret: string,
-  header: string
-): boolean {
-  const expected = `sha256=${createHmac("sha256", secret)
-    .update(body)
-    .digest("hex")}`;
-  try {
-    return timingSafeEqual(Buffer.from(expected), Buffer.from(header));
-  } catch {
-    return false;
-  }
+/**
+ * Narrow parsed JSON to a payload we know how to handle. Returns null for any
+ * other shape, including event types added by a newer backend.
+ */
+function asWebhookPayload(value: unknown): WebhookPayload | null {
+  if (typeof value !== "object" || value === null) return null;
+  const type = (value as { type?: unknown }).type;
+  return type === "session.started" ||
+    type === "session.ended" ||
+    type === "endpoint.verification"
+    ? (value as WebhookPayload)
+    : null;
 }
