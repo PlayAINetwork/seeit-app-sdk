@@ -195,9 +195,16 @@ export abstract class GlassAppServer {
       console.log(
         "[GlassAppServer] Answered SeeIt endpoint verification challenge"
       );
+      // Echo the received body back verbatim. SeeIt reads `.challenge` off the
+      // response, so `{ challenge }` alone would also pass today — but replying
+      // with the exact bytes we were sent is what the handshake asks for, and
+      // stays correct if the check is ever tightened.
       res
-        .writeHead(200, { "Content-Type": "application/json" })
-        .end(JSON.stringify({ challenge: payload.challenge }));
+        .writeHead(200, {
+          "Content-Type": "application/json",
+          "Content-Length": String(raw.length),
+        })
+        .end(raw);
       return;
     }
 

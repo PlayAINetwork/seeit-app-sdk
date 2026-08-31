@@ -65,11 +65,25 @@ describe('endpoint.verification handshake', () => {
   const challenge = 'ab'.repeat(24);
   const body = JSON.stringify({ type: 'endpoint.verification', challenge });
 
-  test('echoes the challenge when the signature is valid', async () => {
+  test('echoes the received body verbatim when the signature is valid', async () => {
     const res = await post(body);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ challenge });
+    // Byte-identical to what was sent — not a re-serialization.
+    expect(await res.text()).toBe(body);
     expect(glass.sessions).toHaveLength(0);
+  });
+
+  test('the echoed body satisfies how SeeIt reads it back', async () => {
+    // backend/src/util/webhook.ts: JSON.parse(text)?.challenge, else raw text.
+    const res = await post(body);
+    const text = await res.text();
+    let echoed: unknown;
+    try {
+      echoed = JSON.parse(text)?.challenge;
+    } catch {
+      echoed = text.trim();
+    }
+    expect(echoed).toBe(challenge);
   });
 
   test('does not echo the challenge when the signature is wrong', async () => {
@@ -151,7 +165,7 @@ describe('pre-consumed request bodies', () => {
         body,
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ challenge });
+      expect(await res.text()).toBe(body);
     } finally {
       await new Promise<void>((resolve) => parsed.close(() => resolve()));
     }

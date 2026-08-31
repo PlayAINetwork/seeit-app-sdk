@@ -22,17 +22,28 @@ Cloudflare Tunnel) while developing.
 
 ## 2. Your signing secret
 
-Issued per app and **shown once**, at registration. Format: `whsec_` followed
-by 64 hex characters.
+Format: `whsec_` followed by 64 hex characters.
+
+Creating an app generates a secret, but **the create response does not include
+it** — it is stored encrypted and no read endpoint returns it. The only
+endpoint that ever hands you plaintext is `rotate-secret`, so getting your
+first usable secret means rotating once:
 
 ```bash
-# Lost it, or rotating? The response is the only place the new secret appears.
 curl -X POST https://api.seeit.ai/glass/apps/$APP_ID/webhook/rotate-secret \
   -H "Cookie: $YOUR_SESSION_COOKIE"
 ```
 
-Rotating **clears verification** — re-verify afterwards (step 3). So does
-changing your callback URL. No other endpoint will ever return the secret.
+```json
+{
+  "secret": "whsec_...",
+  "message": "Store this now — it is not shown again. Re-verify the endpoint before events resume."
+}
+```
+
+Store it immediately. Rotating **clears verification**, so always verify
+(step 3) *after* rotating, not before — and if you lose the secret, your only
+recovery is another rotation followed by another verify.
 
 Pass it to the server:
 
@@ -63,11 +74,14 @@ SeeIt then POSTs a signed challenge to your endpoint:
 { "type": "endpoint.verification", "challenge": "<random hex>" }
 ```
 
-Your endpoint must reply `200` echoing the challenge back, as either
-`{"challenge":"<same hex>"}` or the raw string. **`GlassAppServer` does this for
-you** — there is no code to write. It verifies the signature first, then echoes;
-an unverified challenge is never answered, because that would let anyone who
-knows your URL prove "ownership" of it.
+Your endpoint must reply `200` with the same JSON body it received.
+**`GlassAppServer` does this for you** — there is no code to write. It verifies
+the signature first, then echoes the received bytes back verbatim; an unverified
+challenge is never answered, because that would let anyone who knows your URL
+prove "ownership" of it.
+
+If you are handling this yourself, echo the raw body you were sent rather than
+building a new object.
 
 Once this succeeds, events start flowing.
 
@@ -120,7 +134,12 @@ export async function POST(req: Request) {
 
   const event = JSON.parse(raw);
   if (event.type === 'endpoint.verification') {
-    return Response.json({ challenge: event.challenge });   // don't forget this
+    // Echo the body back verbatim — don't forget this, or you get
+    // "The endpoint did not echo the challenge" and no events ever arrive.
+    return new Response(raw, {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   }
   // ... handle session.started / session.ended
   return Response.json({ ok: true });
@@ -179,9 +198,14 @@ Other failures:
 
 - **HTTP 500 and "the request body was consumed before the webhook handler ran"**
   — a body parser is mounted ahead of the webhook route. See §4.
-- **`/webhook/verify` reports the endpoint did not echo the challenge** — the
-  endpoint wasn't reachable, returned non-200, or is behind auth that blocked
-  the request. Note the challenge POST is itself signed, so a wrong secret
-  fails here too.
+- **"The endpoint did not echo the challenge"** — the most common cause is
+  running an SDK older than 2.0.0, which has no `endpoint.verification` handler
+  and replies `{"ok":true}`. Check the deployed version, not your local one:
+  the examples pin the SDK by git commit in `bun.lock` and deploy with a frozen
+  lockfile, so a stale lock silently ships the old code. Otherwise: the endpoint
+  wasn't reachable, returned non-200, or is behind auth that blocked the
+  request. The challenge POST is itself signed, so a wrong secret fails here
+  too — and since rotating clears verification, rotate first, redeploy, then
+  verify.
 - **HTTP 413** — body over 1 MiB. Raise `maxWebhookBodyBytes` if you ever
   legitimately need to.

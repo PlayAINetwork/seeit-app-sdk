@@ -55,7 +55,7 @@ cp .env.example .env     # fill in SEEIT_APP_ID, SEEIT_JWKS_URL, OPENAI_API_KEY
 | `SEEIT_APP_ID` | Your app's UUID. Tokens must carry it as `aud`. |
 | `SEEIT_JWKS_URL` | SeeIt's public keys, e.g. `http://localhost:3000/glass/.well-known/jwks.json`. |
 | `OPENAI_API_KEY` | Summarizes the meeting + infers participants (`gpt-4o-mini`). |
-| `WEBHOOK_SECRET` | **Required.** The `whsec_…` signing secret from the dev console, shown once at registration. |
+| `WEBHOOK_SECRET` | **Required.** The `whsec_…` signing secret. Obtain it with `POST /glass/apps/:appId/webhook/rotate-secret` — no other endpoint returns it. |
 
 ## Run
 
@@ -76,10 +76,16 @@ In the SeeIt developer console, point both URLs at this server (same origin):
 - **Webhook URL** → `https://<your-host>/webhook`
 - **Webview URL** → `https://<your-host>/`
 
-Copy the signing secret shown at registration into `WEBHOOK_SECRET`, deploy,
-then verify the endpoint — **no events are delivered until this passes**:
+Creating the app generates a signing secret but does not show it to you. Call
+`rotate-secret` once to get plaintext, put it in `WEBHOOK_SECRET`, deploy, then
+verify — **no events are delivered until verification passes**:
 
 ```bash
+# 1. Get a secret you can read (this is the only endpoint that returns plaintext)
+curl -X POST https://api.seeit.ai/glass/apps/$APP_ID/webhook/rotate-secret \
+  -H "Cookie: $YOUR_SESSION_COOKIE"
+
+# 2. Put it in WEBHOOK_SECRET, deploy, then verify
 curl -X POST https://api.seeit.ai/glass/apps/$APP_ID/webhook/verify \
   -H "Cookie: $YOUR_SESSION_COOKIE"
 ```

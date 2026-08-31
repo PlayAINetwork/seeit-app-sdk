@@ -64,7 +64,16 @@ bun run index.ts
 2. Set the **Webhook URL** to `https://your-server.com/webhook` (the path
    defaults to `/webhook`). It must be HTTPS on a public address — use a tunnel
    while developing.
-3. **Copy the signing secret.** It is shown once, at registration.
+3. **Get a signing secret.** Creating the app generates one, but no endpoint
+   returns it — call `rotate-secret` once to obtain plaintext you can actually
+   read, and store it immediately:
+
+   ```bash
+   curl -X POST https://api.seeit.ai/glass/apps/$APP_ID/webhook/rotate-secret \
+     -H "Cookie: $YOUR_SESSION_COOKIE"
+   # → { "secret": "whsec_...", "message": "Store this now — it is not shown again. ..." }
+   ```
+
 4. Deploy your app with that secret set as `WEBHOOK_SECRET`.
 5. **Verify your endpoint** — click Verify in the dashboard, or:
 
