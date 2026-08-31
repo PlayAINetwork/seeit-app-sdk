@@ -5,7 +5,7 @@
     "": {
       "name": "glass-translate-example",
       "dependencies": {
-        "@seeit/app-sdk": "github:PlayAINetwork/seeit-app-sdk",
+        "@seeit/app-sdk": "github:PlayAINetwork/seeit-app-sdk#dev",
         "dotenv": "^16.4.5",
         "express": "^4.21.2",
         "framer-motion": "^11.15.0",
@@ -192,7 +192,7 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.61.0", "", { "os": "win32", "cpu": "x64" }, "sha512-tkuFxhvKO/HlGd0VsINF6vHSYH8AF8W0TcNxKDK6JZmrehngFj78pToc8iemtnvwilDjs2G/qSzYFhe9U8q+fw=="],
 
-    "@seeit/app-sdk": ["@seeit/app-sdk@github:PlayAINetwork/seeit-app-sdk#c71bf72", { "dependencies": { "jose": "^6.2.3", "tsup": "^8.3.0", "typescript": "^5.7.0", "ws": "^8.18.0" } }, "PlayAINetwork-seeit-app-sdk-c71bf72", "sha512-HiqjmtG1xwQUQ+8PYKXWly1ZOVseOwVDzjUgcAJUEO/pQMRtDgfE/xnXt4A8WnNQdXkan01+xLJFKLyIeHHxiw=="],
+    "@seeit/app-sdk": ["@seeit/app-sdk@github:PlayAINetwork/seeit-app-sdk#dfeae80", { "dependencies": { "jose": "^6.2.3", "tsup": "^8.3.0", "typescript": "^5.7.0", "ws": "^8.18.0" } }, "PlayAINetwork-seeit-app-sdk-dfeae80", "sha512-BMRY1ucR3uShr0EkY1UVGluLPSFbvLSHX6H6E07TFf4zorfsuc/Z8HTf/qjh5NjtJNy+upYaNBfuUvxMBdu8QQ=="],
 
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 
